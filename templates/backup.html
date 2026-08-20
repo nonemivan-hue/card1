@@ -3,6 +3,35 @@
 {% block page_title %}Резервное копирование{% endblock %}
 {% block content %}
 
+<div class="card mb-4">
+    <div class="card-header bg-white">
+        <h6 class="m-0"><i class="bi bi-clock-history text-primary"></i> Настройка ежедневного резервного копирования</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">Настройте автоматическое создание резервных копий каждый день в указанное время.</p>
+        <form method="POST" action="{{ url_for('backup_index') }}" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Время создания копии</label>
+                <input type="time" name="backup_schedule_time" class="form-control" value="{{ schedule_time }}" required>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check mt-8">
+                    <input type="checkbox" name="backup_enabled" class="form-check-input" id="backup_enabled" {% if backup_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="backup_enabled">Включить авто-резервное копирование</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" name="backup_schedule" class="btn btn-primary">
+                    <i class="bi bi-save"></i> Сохранить настройки
+                </button>
+            </div>
+        </form>
+        <div class="alert alert-info mt-3 mb-0 small">
+            <i class="bi bi-info-circle"></i> Для работы автоматического резервного копирования необходимо настроить запуск скрипта <code>backup_daily.sh</code> через планировщик задач (cron).
+        </div>
+    </div>
+</div>
+
 <div class="row g-4">
     <div class="col-md-5">
         <div class="card h-100">
