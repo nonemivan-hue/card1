@@ -94,21 +94,6 @@ def is_reports_user():
     return "reports" in roles and "admin" not in roles and "user" not in roles and "issue" not in roles
 
 
-def reports_required(f):
-    """Decorator to restrict access to users with 'reports' role only."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if "user_id" not in session:
-            flash("Необходима авторизация", "warning")
-            return redirect(url_for("login"))
-        user = get_employee_by_id(session["user_id"])
-        if not user or "reports" not in user.get("roles", []):
-            flash("Доступ запрещен. Требуется роль 'Отчеты'", "danger")
-            return redirect(url_for("index"))
-        return f(*args, **kwargs)
-    return decorated
-
-
 # ============== CONTEXT PROCESSOR ==============
 @app.context_processor
 def inject_globals():
