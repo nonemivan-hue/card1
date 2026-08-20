@@ -82,6 +82,33 @@ def is_issue_user():
     return "issue" in roles and "admin" not in roles and "user" not in roles
 
 
+def is_reports_user():
+    """Check if current user has 'reports' role only (access to reports only)."""
+    if "user_id" not in session:
+        return False
+    user = get_employee_by_id(session["user_id"])
+    if not user:
+        return False
+    roles = user.get("roles", [])
+    # User with 'reports' role but no 'admin', 'user', or 'issue' roles
+    return "reports" in roles and "admin" not in roles and "user" not in roles and "issue" not in roles
+
+
+def reports_required(f):
+    """Decorator to restrict access to users with 'reports' role only."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            flash("Необходима авторизация", "warning")
+            return redirect(url_for("login"))
+        user = get_employee_by_id(session["user_id"])
+        if not user or "reports" not in user.get("roles", []):
+            flash("Доступ запрещен. Требуется роль 'Отчеты'", "danger")
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ============== CONTEXT PROCESSOR ==============
 @app.context_processor
 def inject_globals():
@@ -94,7 +121,8 @@ def inject_globals():
         "CARD_STATUSES": CARD_STATUSES,
         "current_user": user,
         "is_admin": user and "admin" in user.get("roles", []),
-        "is_issue_user": is_issue_user()
+        "is_issue_user": is_issue_user(),
+        "is_reports_user": is_reports_user()
     }
 
 
@@ -243,11 +271,13 @@ def ref_card_types():
         flash("Вид карты добавлен", "success")
         return redirect(url_for("ref_card_types"))
     items = get_card_types()
-    return render_template("refs/card_types.html", items=items)
+    user = get_employee_by_id(session.get("user_id"))
+    return render_template("refs/card_types.html", items=items, is_admin=user and "admin" in user.get("roles", []))
 
 
 @app.route("/refs/card_types/edit/<item_id>", methods=["GET", "POST"])
 @login_required
+@admin_required
 def ref_card_types_edit(item_id):
     item = get_card_type_by_id(item_id)
     if not item:
@@ -943,6 +973,23 @@ def download_doc_template(doc_type):
 @login_required
 @admin_required
 def backup_index():
+    # Handle schedule settings POST
+    if request.method == "POST" and "backup_schedule" in request.form:
+        schedule_time = request.form.get("backup_schedule_time", "02:00")
+        backup_enabled = request.form.get("backup_enabled") == "on"
+        # Store schedule settings in constants.json
+        constants = load_all("constants")
+        constants_data = {}
+        for c in constants:
+            constants_data[c.get("key", "")] = c.get("value", "")
+        constants_data["backup_schedule_time"] = schedule_time
+        constants_data["backup_enabled"] = "true" if backup_enabled else "false"
+        # Save back to constants
+        save_all("constants", [{"key": k, "value": v} for k, v in constants_data.items()])
+        log_action(session.get("user_id"), "BACKUP_SCHEDULE_UPDATE", f"Schedule updated: {schedule_time}, enabled={backup_enabled}")
+        flash("Настройки резервного копирования обновлены", "success")
+        return redirect(url_for("backup_index"))
+    
     if request.method == "POST":
         file = request.files.get("backup_file")
         if not file:
@@ -989,7 +1036,18 @@ def backup_index():
                 "size": f"{size / 1024:.1f} КБ",
                 "date": datetime.fromtimestamp(os.path.getmtime(fpath)).strftime("%Y-%m-%d %H:%M:%S")
             })
-    return render_template("backup.html", backups=backups)
+    
+    # Load schedule settings
+    constants = load_all("constants")
+    schedule_time = "02:00"
+    backup_enabled = False
+    for c in constants:
+        if c.get("key") == "backup_schedule_time":
+            schedule_time = c.get("value", "02:00")
+        elif c.get("key") == "backup_enabled":
+            backup_enabled = c.get("value") == "true"
+    
+    return render_template("backup.html", backups=backups, schedule_time=schedule_time, backup_enabled=backup_enabled)
 
 
 @app.route("/backup/create", methods=["POST"])
@@ -1072,18 +1130,16 @@ def reports():
 
 @app.route("/reports/cards_as_of", methods=["GET", "POST"])
 @login_required
+@reports_required
 def report_cards_as_of():
-    report = None
-    date_str = ""
-    if request.method == "POST":
-        date_str = request.form.get("date", "")
-        if date_str:
-            report = get_cards_report_as_of(date_str)
-    return render_template("reports/cards_as_of.html", report=report, date_str=date_str)
+    """Report: карты на число."""
+    report = get_cards_as_of_report()
+    return render_template("reports/cards_as_of.html", report=report, statuses=REPORT_STATUSES)
 
 
 @app.route("/reports/period", methods=["GET", "POST"])
 @login_required
+@reports_required
 def report_period():
     report = None
     start_date = ""
@@ -1172,10 +1228,10 @@ def report_stock():
 
 @app.route("/reports/cards_as_of")
 @login_required
-def report_cards_as_of_new():
-    """Report: карты на число."""
-    report = get_cards_as_of_report()
-    return render_template("reports/cards_as_of.html", report=report, statuses=REPORT_STATUSES)
+def report_cards_as_of_old():
+    """Old route - removed."""
+    flash("Используйте новый маршрут отчета", "warning")
+    return redirect(url_for("report_cards_as_of"))
 
 
 # ============== REPORTS EXPORT TO EXCEL ==============
@@ -1199,16 +1255,14 @@ def _export_report_to_excel(report_data, columns, sheet_title="Отчет"):
 @app.route("/reports/export/cards_as_of")
 @login_required
 def export_cards_as_of():
-    date_str = request.args.get("date", "")
-    if not date_str:
-        flash("Укажите дату", "warning")
-        return redirect(url_for("report_cards_as_of"))
-    report = get_cards_report_as_of(date_str)
-    output = _export_report_to_excel(report, ["card_type_name", "status", "count"], "Карты за день")
+    """Export cards_as_of report to Excel."""
+    report = get_cards_as_of_report()
+    columns = ["card_type_name"] + REPORT_STATUSES + ["total"]
+    output = _export_report_to_excel(report, columns, "Карты на число")
     if output is None:
         flash("openpyxl не установлен", "danger")
         return redirect(url_for("report_cards_as_of"))
-    return send_file(output, download_name=f"cards_as_of_{date_str}.xlsx", as_attachment=True)
+    return send_file(output, download_name="cards_as_of.xlsx", as_attachment=True)
 
 
 @app.route("/reports/export/period")
@@ -1255,22 +1309,31 @@ def export_edo():
         flash("Укажите период", "warning")
         return redirect(url_for("report_edo"))
     report = get_edo_report(start_date, end_date)
-    # Custom format: card_type_name, numbers
+    # Export to Word format
     try:
-        import openpyxl
+        from docx import Document
     except ImportError:
-        flash("openpyxl не установлен", "danger")
+        flash("python-docx не установлен", "danger")
         return redirect(url_for("report_edo"))
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "ЭДО"
-    ws.append(["Вид карты", "Номера карт"])
+    
+    doc = Document()
+    doc.add_heading(f'Отчет для ЭДО за период с {start_date} по {end_date}', 0)
+    
+    table = doc.add_table(rows=1, cols=2)
+    table.style = 'Table Grid'
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Вид карты'
+    hdr_cells[1].text = 'Номера карт'
+    
     for row in report:
-        ws.append([row.get("card_type_name", ""), row.get("numbers", "")])
+        row_cells = table.add_row().cells
+        row_cells[0].text = row.get("card_type_name", "")
+        row_cells[1].text = row.get("numbers", "")
+    
     output = BytesIO()
-    wb.save(output)
+    doc.save(output)
     output.seek(0)
-    return send_file(output, download_name=f"edo_{start_date}_{end_date}.xlsx", as_attachment=True)
+    return send_file(output, download_name=f"edo_{start_date}_{end_date}.docx", as_attachment=True)
 
 
 @app.route("/reports/export/summary")
