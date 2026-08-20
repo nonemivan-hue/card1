@@ -28,8 +28,8 @@ from app.models import (
     get_mfcs, get_mfc_by_id,
     get_employees, get_employee_by_id, get_employee_by_login, check_permission,
     get_documents, get_document_by_id, post_document, delete_document,
-    get_cards_report_as_of, get_period_report, get_period_report_detail, get_edo_report, get_summary_report, get_stock_report,
-    CARD_STATUSES, DOCUMENT_TYPES, log_action, now_iso
+    get_cards_report_as_of, get_period_report, get_period_report_detail, get_edo_report, get_summary_report, get_stock_report, get_cards_as_of_report,
+    CARD_STATUSES, DOCUMENT_TYPES, REPORT_STATUSES, log_action, now_iso
 )
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -91,6 +91,7 @@ def inject_globals():
     return {
         "card_statuses": CARD_STATUSES,
         "document_types": DOCUMENT_TYPES,
+        "CARD_STATUSES": CARD_STATUSES,
         "current_user": user,
         "is_admin": user and "admin" in user.get("roles", []),
         "is_issue_user": is_issue_user()
@@ -1167,6 +1168,14 @@ def report_stock():
     total_print = sum(r.get("ready_to_print", 0) for r in report)
     total_issue = sum(r.get("ready_to_issue", 0) for r in report)
     return render_template("reports/stock.html", report=report, total_print=total_print, total_issue=total_issue)
+
+
+@app.route("/reports/cards_as_of")
+@login_required
+def report_cards_as_of_new():
+    """Report: карты на число."""
+    report = get_cards_as_of_report()
+    return render_template("reports/cards_as_of.html", report=report, statuses=REPORT_STATUSES)
 
 
 # ============== REPORTS EXPORT TO EXCEL ==============
