@@ -36,7 +36,7 @@
                 <tbody>
                     {% for row in report %}
                     <tr class="table-light">
-                        <td colspan="3" class="fw-bold">{{ row.card_type_name }}</td>
+                        <td colspan="3" class="fw-bold">{{ row.report_name or row.card_type_name }}</td>
                     </tr>
                     {% for number in row.numbers %}
                     <tr>
