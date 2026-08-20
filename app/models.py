@@ -201,14 +201,15 @@ def delete_document(doc_id, user_id=None):
     doc = get_document_by_id(doc_id)
     if not doc:
         return False
-    # Revert card statuses if needed
+    # Revert card statuses to previous state before posting
     if doc.get("status") == "posted":
         for line in doc.get("lines", []):
             card = get_card_by_number(line.get("card_number"))
             if card:
-                # Simple revert - set to previous status or empty
+                # Get the previous_status from line if stored, otherwise revert based on doc_type
+                prev_status = line.get("previous_status", "")
                 update("cards", lambda c: c.get("id") == card["id"],
-                       {"status": "", "updated_at": now_iso()})
+                       {"status": prev_status, "updated_at": now_iso()})
     delete("documents", lambda d: d.get("id") == doc_id)
     if user_id:
         log_action(user_id, "DELETE_DOC", f"Deleted document {doc.get('doc_number')}")
@@ -228,6 +229,10 @@ def post_document(doc_id, user_id=None):
     for idx, line in enumerate(lines, 1):
         card_number = line.get("card_number")
         card = get_card_by_number(card_number)
+        
+        # Store current status before changing (for rollback on unpost)
+        if card:
+            line["previous_status"] = card.get("status", "")
 
         if doc_type == "receipt":
             # Прием карт
@@ -321,9 +326,9 @@ def post_document(doc_id, user_id=None):
     if errors:
         return False, "; ".join(errors)
 
-    # Mark document as posted
+    # Update document with lines including previous_status for rollback
     update("documents", lambda d: d.get("id") == doc_id,
-           {"status": "posted", "posted_at": now_iso(), "posted_by": user_id})
+           {"status": "posted", "posted_at": now_iso(), "posted_by": user_id, "lines": lines})
 
     if user_id:
         log_action(user_id, "POST_DOC", f"Posted document {doc.get('doc_number')} ({doc_type})")

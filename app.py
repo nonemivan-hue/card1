@@ -94,6 +94,21 @@ def is_reports_user():
     return "reports" in roles and "admin" not in roles and "user" not in roles and "issue" not in roles
 
 
+def reports_required(f):
+    """Decorator to restrict access to users with 'reports' role only."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            flash("Необходима авторизация", "warning")
+            return redirect(url_for("login"))
+        user = get_employee_by_id(session["user_id"])
+        if not user or "reports" not in user.get("roles", []):
+            flash("Доступ запрещен. Требуется роль 'Отчеты'", "danger")
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ============== CONTEXT PROCESSOR ==============
 @app.context_processor
 def inject_globals():
@@ -391,6 +406,7 @@ def ref_mfcs():
 
 @app.route("/refs/mfcs/edit/<item_id>", methods=["GET", "POST"])
 @login_required
+@admin_required
 def ref_mfcs_edit(item_id):
     item = get_mfc_by_id(item_id)
     if not item:
@@ -410,6 +426,7 @@ def ref_mfcs_edit(item_id):
 
 @app.route("/refs/mfcs/delete/<item_id>", methods=["POST"])
 @login_required
+@admin_required
 def ref_mfcs_delete(item_id):
     delete("mfcs", lambda x: x.get("id") == item_id)
     flash("МФЦ удален", "success")
@@ -460,16 +477,23 @@ def ref_employees_edit(item_id):
     
     if request.method == "POST":
         roles = request.form.getlist("roles")
+        # Build permissions dict from form
+        permissions = {}
+        for resource in ["card_types", "cards", "owners", "applicants", "organizations", "mfcs", "employees", "documents"]:
+            perm_level = request.form.get(f"perm_{resource}", "")
+            if perm_level:
+                permissions[resource] = perm_level
+        
         update("employees", lambda x: x.get("id") == item_id, {
             "full_name": request.form.get("full_name", ""),
             "login": request.form.get("login", ""),
             "roles": roles if roles else ["user"],
-            "permissions": {}
+            "permissions": permissions
         })
         flash("Сотрудник обновлен", "success")
         return redirect(url_for("ref_employees"))
     
-    return render_template("refs/employees_edit.html", item=item)
+    return render_template("refs/employees_edit.html", item=item, resources=["card_types", "cards", "owners", "applicants", "organizations", "mfcs", "employees", "documents"])
 
 
 @app.route("/refs/employees/delete/<item_id>", methods=["POST"])
