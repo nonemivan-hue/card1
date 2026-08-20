@@ -505,7 +505,7 @@ def get_edo_report(start_date, end_date):
     for ct_id, numbers in result.items():
         ct = get_card_type_by_id(ct_id)
         report.append({
-            "card_type_name": ct.get("name", "Не указан") if ct else "Не указан",
+            "card_type_name": ct.get("report_name", "") or ct.get("name", "Не указан") if ct else "Не указан",
             "numbers": ", ".join(sorted(numbers))
         })
     return report
@@ -533,7 +533,8 @@ def get_summary_report(start_date, end_date):
     for ct_id, numbers in result.items():
         ct = get_card_type_by_id(ct_id)
         report.append({
-            "card_type_name": ct.get("report_name", "") or ct.get("name", "Не указан") if ct else "Не указан",
+            "card_type_name": ct.get("name", "Не указан") if ct else "Не указан",
+            "report_name": ct.get("report_name", "") or ct.get("name", "") if ct else "",
             "print_name": ct.get("print_name", ct.get("name", "")) if ct else "",
             "numbers": sorted(numbers)
         })

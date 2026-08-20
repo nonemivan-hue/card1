@@ -23,6 +23,15 @@ venv/
 .vscode/
 .idea/
 
+# Temporary files
+*.tmp
+*.swp
+
+# Environment files
+.env
+.env.local
+*.env.*
+
 # Coverage reports
 coverage/
 htmlcov/

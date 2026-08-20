@@ -1113,18 +1113,16 @@ def reports():
 
 @app.route("/reports/cards_as_of", methods=["GET", "POST"])
 @login_required
+@reports_required
 def report_cards_as_of():
-    report = None
-    date_str = ""
-    if request.method == "POST":
-        date_str = request.form.get("date", "")
-        if date_str:
-            report = get_cards_report_as_of(date_str)
-    return render_template("reports/cards_as_of.html", report=report, date_str=date_str)
+    """Report: карты на число."""
+    report = get_cards_as_of_report()
+    return render_template("reports/cards_as_of.html", report=report, statuses=REPORT_STATUSES)
 
 
 @app.route("/reports/period", methods=["GET", "POST"])
 @login_required
+@reports_required
 def report_period():
     report = None
     start_date = ""
@@ -1213,10 +1211,10 @@ def report_stock():
 
 @app.route("/reports/cards_as_of")
 @login_required
-def report_cards_as_of_new():
-    """Report: карты на число."""
-    report = get_cards_as_of_report()
-    return render_template("reports/cards_as_of.html", report=report, statuses=REPORT_STATUSES)
+def report_cards_as_of_old():
+    """Old route - removed."""
+    flash("Используйте новый маршрут отчета", "warning")
+    return redirect(url_for("report_cards_as_of"))
 
 
 # ============== REPORTS EXPORT TO EXCEL ==============
@@ -1240,16 +1238,14 @@ def _export_report_to_excel(report_data, columns, sheet_title="Отчет"):
 @app.route("/reports/export/cards_as_of")
 @login_required
 def export_cards_as_of():
-    date_str = request.args.get("date", "")
-    if not date_str:
-        flash("Укажите дату", "warning")
-        return redirect(url_for("report_cards_as_of"))
-    report = get_cards_report_as_of(date_str)
-    output = _export_report_to_excel(report, ["card_type_name", "status", "count"], "Карты за день")
+    """Export cards_as_of report to Excel."""
+    report = get_cards_as_of_report()
+    columns = ["card_type_name"] + REPORT_STATUSES + ["total"]
+    output = _export_report_to_excel(report, columns, "Карты на число")
     if output is None:
         flash("openpyxl не установлен", "danger")
         return redirect(url_for("report_cards_as_of"))
-    return send_file(output, download_name=f"cards_as_of_{date_str}.xlsx", as_attachment=True)
+    return send_file(output, download_name="cards_as_of.xlsx", as_attachment=True)
 
 
 @app.route("/reports/export/period")
@@ -1296,22 +1292,31 @@ def export_edo():
         flash("Укажите период", "warning")
         return redirect(url_for("report_edo"))
     report = get_edo_report(start_date, end_date)
-    # Custom format: card_type_name, numbers
+    # Export to Word format
     try:
-        import openpyxl
+        from docx import Document
     except ImportError:
-        flash("openpyxl не установлен", "danger")
+        flash("python-docx не установлен", "danger")
         return redirect(url_for("report_edo"))
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "ЭДО"
-    ws.append(["Вид карты", "Номера карт"])
+    
+    doc = Document()
+    doc.add_heading(f'Отчет для ЭДО за период с {start_date} по {end_date}', 0)
+    
+    table = doc.add_table(rows=1, cols=2)
+    table.style = 'Table Grid'
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Вид карты'
+    hdr_cells[1].text = 'Номера карт'
+    
     for row in report:
-        ws.append([row.get("card_type_name", ""), row.get("numbers", "")])
+        row_cells = table.add_row().cells
+        row_cells[0].text = row.get("card_type_name", "")
+        row_cells[1].text = row.get("numbers", "")
+    
     output = BytesIO()
-    wb.save(output)
+    doc.save(output)
     output.seek(0)
-    return send_file(output, download_name=f"edo_{start_date}_{end_date}.xlsx", as_attachment=True)
+    return send_file(output, download_name=f"edo_{start_date}_{end_date}.docx", as_attachment=True)
 
 
 @app.route("/reports/export/summary")
