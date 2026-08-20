@@ -27,6 +27,14 @@ DOCUMENT_TYPES = {
     "return_mfc": "Возврат из МФЦ"
 }
 
+REPORT_STATUSES = [
+    "ready_to_print",
+    "ready_to_issue", 
+    "issued",
+    "defect",
+    "transferred_region"
+]
+
 
 # ============== HELPERS ==============
 def now_iso():
@@ -525,8 +533,41 @@ def get_summary_report(start_date, end_date):
     for ct_id, numbers in result.items():
         ct = get_card_type_by_id(ct_id)
         report.append({
-            "card_type_name": ct.get("name", "Не указан") if ct else "Не указан",
+            "card_type_name": ct.get("report_name", "") or ct.get("name", "Не указан") if ct else "Не указан",
             "print_name": ct.get("print_name", ct.get("name", "")) if ct else "",
             "numbers": sorted(numbers)
         })
+    return report
+
+
+def get_cards_as_of_report(as_of_date=None):
+    """
+    Report: карты на число.
+    Rows = card types, columns = statuses, cells = count.
+    Uses report_name from card_types.
+    """
+    cards = load_all("cards")
+    card_types = get_card_types()
+    
+    # Initialize matrix: {ct_id: {status: count}}
+    result = {}
+    for ct in card_types:
+        ct_id = ct["id"]
+        result[ct_id] = {"card_type_name": ct.get("report_name", "") or ct.get("name", "Не указан"), "total": 0}
+        for status in REPORT_STATUSES:
+            result[ct_id][status] = 0
+    
+    # Count cards
+    for card in cards:
+        ct_id = card.get("card_type_id", "")
+        status = card.get("status", "")
+        if ct_id in result and status in REPORT_STATUSES:
+            result[ct_id][status] += 1
+            result[ct_id]["total"] += 1
+    
+    # Build report list
+    report = []
+    for ct_id in sorted(result.keys(), key=lambda k: result[k]["card_type_name"]):
+        report.append(result[ct_id])
+    
     return report
