@@ -216,6 +216,29 @@ def delete_document(doc_id, user_id=None):
     return True
 
 
+def unpost_document(doc_id, user_id=None):
+    """Unpost a document - revert card statuses to previous state."""
+    doc = get_document_by_id(doc_id)
+    if not doc or doc.get("status") != "posted":
+        return False, "Документ не найден или не проведен"
+    
+    # Revert card statuses to previous state
+    for line in doc.get("lines", []):
+        card = get_card_by_number(line.get("card_number"))
+        if card:
+            prev_status = line.get("previous_status", "")
+            update("cards", lambda c: c.get("id") == card["id"],
+                   {"status": prev_status, "updated_at": now_iso()})
+    
+    # Update document status
+    update("documents", lambda d: d.get("id") == doc_id,
+           {"status": "draft", "posted_at": None})
+    
+    if user_id:
+        log_action(user_id, "UNPOST_DOC", f"Отмена проведения документа {doc.get('doc_number')}")
+    return True, "Документ успешно отменен"
+
+
 def post_document(doc_id, user_id=None):
     """Post a document - apply business logic and update card statuses."""
     doc = get_document_by_id(doc_id)
