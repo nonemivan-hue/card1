@@ -256,11 +256,13 @@ def ref_card_types():
         flash("Вид карты добавлен", "success")
         return redirect(url_for("ref_card_types"))
     items = get_card_types()
-    return render_template("refs/card_types.html", items=items)
+    user = get_employee_by_id(session.get("user_id"))
+    return render_template("refs/card_types.html", items=items, is_admin=user and "admin" in user.get("roles", []))
 
 
 @app.route("/refs/card_types/edit/<item_id>", methods=["GET", "POST"])
 @login_required
+@admin_required
 def ref_card_types_edit(item_id):
     item = get_card_type_by_id(item_id)
     if not item:

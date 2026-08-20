@@ -59,12 +59,16 @@
                     <td>{{ item.print_name }}</td>
                     <td>{{ item.get('report_name', '') or 'Не указано' }}</td>
                     <td class="d-flex gap-1">
+                        {% if is_admin %}
                         <a href="{{ url_for('ref_card_types_edit', item_id=item.id) }}" class="btn btn-sm btn-outline-primary" title="Редактировать">
                             <i class="bi bi-pencil"></i>
                         </a>
+                        {% endif %}
+                        {% if is_admin %}
                         <form method="POST" action="{{ url_for('ref_card_types_delete', item_id=item.id) }}" onsubmit="return confirm('Удалить?');">
                             <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
