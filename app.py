@@ -82,6 +82,18 @@ def is_issue_user():
     return "issue" in roles and "admin" not in roles and "user" not in roles
 
 
+def is_reports_user():
+    """Check if current user has 'reports' role only (access to reports only)."""
+    if "user_id" not in session:
+        return False
+    user = get_employee_by_id(session["user_id"])
+    if not user:
+        return False
+    roles = user.get("roles", [])
+    # User with 'reports' role but no 'admin', 'user', or 'issue' roles
+    return "reports" in roles and "admin" not in roles and "user" not in roles and "issue" not in roles
+
+
 # ============== CONTEXT PROCESSOR ==============
 @app.context_processor
 def inject_globals():
@@ -94,7 +106,8 @@ def inject_globals():
         "CARD_STATUSES": CARD_STATUSES,
         "current_user": user,
         "is_admin": user and "admin" in user.get("roles", []),
-        "is_issue_user": is_issue_user()
+        "is_issue_user": is_issue_user(),
+        "is_reports_user": is_reports_user()
     }
 
 
@@ -943,6 +956,23 @@ def download_doc_template(doc_type):
 @login_required
 @admin_required
 def backup_index():
+    # Handle schedule settings POST
+    if request.method == "POST" and "backup_schedule" in request.form:
+        schedule_time = request.form.get("backup_schedule_time", "02:00")
+        backup_enabled = request.form.get("backup_enabled") == "on"
+        # Store schedule settings in constants.json
+        constants = load_all("constants")
+        constants_data = {}
+        for c in constants:
+            constants_data[c.get("key", "")] = c.get("value", "")
+        constants_data["backup_schedule_time"] = schedule_time
+        constants_data["backup_enabled"] = "true" if backup_enabled else "false"
+        # Save back to constants
+        save_all("constants", [{"key": k, "value": v} for k, v in constants_data.items()])
+        log_action(session.get("user_id"), "BACKUP_SCHEDULE_UPDATE", f"Schedule updated: {schedule_time}, enabled={backup_enabled}")
+        flash("Настройки резервного копирования обновлены", "success")
+        return redirect(url_for("backup_index"))
+    
     if request.method == "POST":
         file = request.files.get("backup_file")
         if not file:
@@ -989,7 +1019,18 @@ def backup_index():
                 "size": f"{size / 1024:.1f} КБ",
                 "date": datetime.fromtimestamp(os.path.getmtime(fpath)).strftime("%Y-%m-%d %H:%M:%S")
             })
-    return render_template("backup.html", backups=backups)
+    
+    # Load schedule settings
+    constants = load_all("constants")
+    schedule_time = "02:00"
+    backup_enabled = False
+    for c in constants:
+        if c.get("key") == "backup_schedule_time":
+            schedule_time = c.get("value", "02:00")
+        elif c.get("key") == "backup_enabled":
+            backup_enabled = c.get("value") == "true"
+    
+    return render_template("backup.html", backups=backups, schedule_time=schedule_time, backup_enabled=backup_enabled)
 
 
 @app.route("/backup/create", methods=["POST"])
