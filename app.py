@@ -245,6 +245,26 @@ def ref_card_types():
     return render_template("refs/card_types.html", items=items)
 
 
+@app.route("/refs/card_types/edit/<item_id>", methods=["GET", "POST"])
+@login_required
+def ref_card_types_edit(item_id):
+    item = get_card_type_by_id(item_id)
+    if not item:
+        flash("Вид карты не найден", "danger")
+        return redirect(url_for("ref_card_types"))
+    
+    if request.method == "POST":
+        update("card_types", lambda x: x.get("id") == item_id, {
+            "name": request.form.get("name", ""),
+            "print_name": request.form.get("print_name", ""),
+            "report_name": request.form.get("report_name", "")
+        })
+        flash("Вид карты обновлен", "success")
+        return redirect(url_for("ref_card_types"))
+    
+    return render_template("refs/card_types_edit.html", item=item)
+
+
 @app.route("/refs/card_types/delete/<item_id>", methods=["POST"])
 @login_required
 def ref_card_types_delete(item_id):
@@ -353,6 +373,25 @@ def ref_mfcs():
     return render_template("refs/mfcs.html", items=items)
 
 
+@app.route("/refs/mfcs/edit/<item_id>", methods=["GET", "POST"])
+@login_required
+def ref_mfcs_edit(item_id):
+    item = get_mfc_by_id(item_id)
+    if not item:
+        flash("МФЦ не найден", "danger")
+        return redirect(url_for("ref_mfcs"))
+    
+    if request.method == "POST":
+        update("mfcs", lambda x: x.get("id") == item_id, {
+            "code": request.form.get("code", ""),
+            "name": request.form.get("name", "")
+        })
+        flash("МФЦ обновлен", "success")
+        return redirect(url_for("ref_mfcs"))
+    
+    return render_template("refs/mfcs_edit.html", item=item)
+
+
 @app.route("/refs/mfcs/delete/<item_id>", methods=["POST"])
 @login_required
 def ref_mfcs_delete(item_id):
@@ -392,6 +431,29 @@ def ref_employees():
         return redirect(url_for("ref_employees"))
     items = get_employees()
     return render_template("refs/employees.html", items=items)
+
+
+@app.route("/refs/employees/edit/<item_id>", methods=["GET", "POST"])
+@login_required
+@admin_required
+def ref_employees_edit(item_id):
+    item = get_employee_by_id(item_id)
+    if not item:
+        flash("Сотрудник не найден", "danger")
+        return redirect(url_for("ref_employees"))
+    
+    if request.method == "POST":
+        roles = request.form.getlist("roles")
+        update("employees", lambda x: x.get("id") == item_id, {
+            "full_name": request.form.get("full_name", ""),
+            "login": request.form.get("login", ""),
+            "roles": roles if roles else ["user"],
+            "permissions": {}
+        })
+        flash("Сотрудник обновлен", "success")
+        return redirect(url_for("ref_employees"))
+    
+    return render_template("refs/employees_edit.html", item=item)
 
 
 @app.route("/refs/employees/delete/<item_id>", methods=["POST"])
